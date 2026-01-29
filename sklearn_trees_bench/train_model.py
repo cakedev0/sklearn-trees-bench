@@ -90,7 +90,7 @@ def train_and_measure(model_class, X, y, **model_params):
     
     # Measure prediction time
     start_time = time.perf_counter()
-    predictions = model.predict(X)
+    predictions = model.predict(X)  # Store result to ensure prediction is actually executed
     predict_time = time.perf_counter() - start_time
     
     return {

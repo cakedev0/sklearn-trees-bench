@@ -25,22 +25,13 @@ uv pip install -e .
 
 ## Quick Start
 
-### 1. Train a Single Model
+### 1. Sanity Check
 
-Train a model on synthetic data:
+Verify the scikit-learn submodule environment can run a single benchmark:
 
 ```bash
-# Train a Decision Tree Classifier
-uv run train-model --model DecisionTreeClassifier --n-repeats 5
-
-# Train a Random Forest with custom parameters
-uv run train-model \
-  --model RandomForestClassifier \
-  --n-samples 5000 \
-  --n-features 50 \
-  --n-repeats 3 \
-  --model-params '{"n_estimators": 100, "max_depth": 10}' \
-  --output results/rf_benchmark.json
+./scikit-learn/sklearn-env/bin/python sklearn_trees_bench/train_model.py \
+  --model DecisionTreeClassifier --n-repeats 1
 ```
 
 ### 2. Orchestrate Benchmarks
@@ -52,7 +43,7 @@ Run benchmarks across multiple configurations and scikit-learn branches:
 git submodule add https://github.com/scikit-learn/scikit-learn.git scikit-learn
 git submodule update --init --recursive
 
-# Run orchestration with example config
+# Build scikit-learn in scikit-learn/sklearn-env (see SETUP.md), then run:
 uv run orchestrate --config example_config.json --output-dir results
 ```
 
@@ -117,13 +108,12 @@ options:
 
 ```
 usage: orchestrate [-h] --config CONFIG [--sklearn-path SKLEARN_PATH]
-                   [--output-dir OUTPUT_DIR] [--skip-install]
+                   [--output-dir OUTPUT_DIR]
 
 options:
   --config              JSON config file with benchmark parameters (required)
   --sklearn-path        Path to scikit-learn submodule (default: 'scikit-learn')
   --output-dir          Output directory for results (default: 'results')
-  --skip-install        Skip scikit-learn installation (use existing environment)
 ```
 
 ## Project Structure
@@ -138,22 +128,6 @@ sklearn-trees-bench/
 ├── visualize_results.ipynb # Jupyter notebook for visualization
 ├── pyproject.toml          # Project configuration
 └── README.md
-```
-
-## Development
-
-```bash
-# Install in development mode
-uv pip install -e .
-
-# Run tests (if available)
-uv run pytest
-
-# Format code
-uv run ruff format
-
-# Lint code
-uv run ruff check
 ```
 
 ## License

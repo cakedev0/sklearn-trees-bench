@@ -16,13 +16,7 @@ git commit -m "Add scikit-learn submodule"
 
 ## Running benchmarks
 
-### Without submodule (current environment)
-
-If you don't need to test different scikit-learn branches, you can run benchmarks with your current scikit-learn installation:
-
-```bash
-uv run orchestrate --config example_config.json --skip-install
-```
+These benchmarks assume scikit-learn is installed in `scikit-learn/sklearn-env`.
 
 ### With submodule (different branches)
 
@@ -35,7 +29,7 @@ uv run orchestrate --config example_config.json
 
 The orchestration script will:
 1. Checkout each branch specified in the config
-2. Install that version of scikit-learn
+2. Use the scikit-learn environment in `scikit-learn/sklearn-env` to rebuild on import
 3. Run all benchmarks for that branch
 4. Move to the next branch
 
@@ -74,7 +68,7 @@ Example `config.json`:
 
 ## Example workflows
 
-### Quick test with current environment
+### Quick test with submodule environment
 
 ```bash
 # Create a minimal config
@@ -90,8 +84,8 @@ cat > quick_test.json << 'ENDCONFIG'
 }
 ENDCONFIG
 
-# Run without submodule
-uv run orchestrate --config quick_test.json --skip-install
+# Run with the submodule environment
+uv run orchestrate --config quick_test.json
 ```
 
 ### Compare multiple scikit-learn versions

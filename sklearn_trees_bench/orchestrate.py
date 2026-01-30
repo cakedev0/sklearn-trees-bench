@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -62,36 +63,7 @@ def checkout_sklearn_branch(sklearn_path, branch):
         return False
 
 
-def install_sklearn_branch(sklearn_path):
-    """Install the current scikit-learn branch.
-    
-    Parameters
-    ----------
-    sklearn_path : Path
-        Path to the scikit-learn submodule
-    
-    Returns
-    -------
-    bool
-        True if installation successful, False otherwise
-    """
-    try:
-        # Install in editable mode
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-e", ".", "--no-build-isolation"],
-            cwd=sklearn_path,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        print(f"  Installed scikit-learn from {sklearn_path}")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"  Error installing scikit-learn: {e.stderr}")
-        return False
-
-
-def get_sklearn_version():
+def get_sklearn_version(python_executable):
     """Get the currently installed scikit-learn version.
     
     Returns
@@ -100,17 +72,35 @@ def get_sklearn_version():
         Version string
     """
     try:
-        import sklearn
-        return sklearn.__version__
-    except ImportError:
+        result = subprocess.run(
+            [python_executable, "-c", "import sklearn; print(sklearn.__version__)"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return "unknown"
 
 
-def run_benchmark(model, model_params, n_samples, n_features, n_repeats, output_file):
+def run_benchmark(
+    python_executable,
+    env,
+    model,
+    model_params,
+    n_samples,
+    n_features,
+    n_repeats,
+    output_file,
+):
     """Run a single benchmark.
     
     Parameters
     ----------
+    python_executable : str
+        Python executable to use for the benchmark run
+    env : dict
+        Environment variables to pass to the subprocess
     model : str
         Model name
     model_params : dict
@@ -131,7 +121,7 @@ def run_benchmark(model, model_params, n_samples, n_features, n_repeats, output_
     """
     # Build command
     cmd = [
-        sys.executable, "-m", "sklearn_trees_bench.train_model",
+        python_executable, "-m", "sklearn_trees_bench.train_model",
         "--model", model,
         "--n-samples", str(n_samples),
         "--n-features", str(n_features),
@@ -141,7 +131,7 @@ def run_benchmark(model, model_params, n_samples, n_features, n_repeats, output_
     ]
     
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
         
         # Load and return results
         with open(output_file, "r") as f:
@@ -177,11 +167,6 @@ def main():
         default="results",
         help="Output directory for results (default: 'results')",
     )
-    parser.add_argument(
-        "--skip-install",
-        action="store_true",
-        help="Skip scikit-learn installation (use existing environment)",
-    )
     
     args = parser.parse_args()
     
@@ -210,10 +195,20 @@ def main():
     n_repeats = config.get("n_repeats", 3)
     
     # Check sklearn submodule
-    if not args.skip_install:
-        if not setup_sklearn_submodule(sklearn_path):
-            return 1
-    
+    if not setup_sklearn_submodule(sklearn_path):
+        return 1
+
+    # Resolve runner environment
+    python_executable = str(sklearn_path / "sklearn-env" / "bin" / "python")
+    if not Path(python_executable).exists():
+        print("Error: scikit-learn environment not found.")
+        print(f"Expected interpreter at: {python_executable}")
+        print("Build scikit-learn in scikit-learn/sklearn-env first.")
+        return 1
+    repo_root = Path(__file__).resolve().parents[1]
+    run_env = dict(os.environ)
+    run_env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{run_env.get('PYTHONPATH', '')}".rstrip(os.pathsep)
+
     # Run benchmarks
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     all_results = []
@@ -232,17 +227,12 @@ def main():
     for branch in config["branches"]:
         print(f"\nProcessing branch: {branch}")
         
-        if not args.skip_install:
-            # Checkout and install branch
-            if not checkout_sklearn_branch(sklearn_path, branch):
-                print(f"  Skipping branch {branch} due to checkout error")
-                continue
-            
-            if not install_sklearn_branch(sklearn_path):
-                print(f"  Skipping branch {branch} due to installation error")
-                continue
+        # Checkout branch
+        if not checkout_sklearn_branch(sklearn_path, branch):
+            print(f"  Skipping branch {branch} due to checkout error")
+            continue
         
-        sklearn_version = get_sklearn_version()
+        sklearn_version = get_sklearn_version(python_executable)
         print(f"  scikit-learn version: {sklearn_version}")
         
         # Run benchmarks for this branch
@@ -274,6 +264,8 @@ def main():
                         
                         # Run benchmark
                         result = run_benchmark(
+                            python_executable,
+                            run_env,
                             model_name,
                             params,
                             n_samples,

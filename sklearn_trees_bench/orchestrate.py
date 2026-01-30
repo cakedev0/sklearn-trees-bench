@@ -75,7 +75,7 @@ def get_sklearn_version(python_executable):
     """
     try:
         result = subprocess.run(
-            [python_executable, "-c", "import sklearn; print(sklearn.__version__)"],
+            [python_executable, "-c", "import sklearn; sklearn.show_versions()"],
             check=True,
             capture_output=True,
             text=True,
@@ -95,32 +95,6 @@ def run_benchmark(
     n_repeats,
     output_file,
 ):
-    """Run a single benchmark.
-
-    Parameters
-    ----------
-    python_executable : str
-        Python executable to use for the benchmark run
-    env : dict
-        Environment variables to pass to the subprocess
-    model : str
-        Model name
-    model_params : dict
-        Model parameters
-    n_samples : int
-        Number of samples
-    n_features : int
-        Number of features
-    n_repeats : int
-        Number of repeats
-    output_file : Path
-        Output file path
-
-    Returns
-    -------
-    dict or None
-        Benchmark results or None if failed
-    """
     # Build command
     cmd = [
         python_executable,
@@ -141,17 +115,47 @@ def run_benchmark(
     ]
 
     try:
+        start_offset = output_file.stat().st_size if output_file.exists() else 0
         subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
 
-        # Load and return results
+        # Load and return the last JSONL entry written by this run.
+        last_line = None
         with open(output_file, "r") as f:
-            return json.load(f)
+            f.seek(start_offset)
+            for line in f:
+                stripped = line.strip()
+                if stripped:
+                    last_line = stripped
+        if last_line is None:
+            raise ValueError("No results written to output file.")
+        return json.loads(last_line)
     except subprocess.CalledProcessError as e:
         print(f"    Error running benchmark: {e.stderr}")
         return None
     except Exception as e:
         print(f"    Error: {e}")
         return None
+
+def generate_combinations(grid: dict | None):
+    if not grid:
+        return [{}]
+
+    param_names = list(grid.keys())
+    param_values = list(grid.values())
+    for values in product(*param_values):
+        yield dict(zip(param_names, values))
+
+
+def generate_scenarios(config: dict):
+    n_samples_list = config.get("n_samples", [1000])
+    n_features_list = config.get("n_features", [20])
+
+    for model_name, param_grid in config["models"].items():
+        print(f"\n  Model: {model_name}")
+
+        param_combinations = generate_combinations(param_grid)
+
+        yield from product([model_name], param_combinations, n_samples_list, n_features_list)
 
 
 def main():
@@ -224,6 +228,7 @@ def main():
     # Run benchmarks
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     all_results = []
+    output_file = output_dir / f"{timestamp}_results.jsonl"
 
     print("=" * 80)
     print("BENCHMARK ORCHESTRATION")
@@ -245,61 +250,31 @@ def main():
             continue
 
         sklearn_version = get_sklearn_version(python_executable)
-        print(f"  scikit-learn version: {sklearn_version}")
 
         # Run benchmarks for this branch
-        for model_name, param_grid in config["models"].items():
-            print(f"\n  Model: {model_name}")
+        for model_name, params, n_samples, n_features in generate_scenarios(config):
+            print(f"    n_samples={n_samples}, n_features={n_features}, params={params}")
 
-            # Generate all parameter combinations
-            if param_grid:
-                param_names = list(param_grid.keys())
-                param_values = list(param_grid.values())
-                param_combinations = [
-                    dict(zip(param_names, values)) for values in product(*param_values)
-                ]
+            # Run benchmark
+            result = run_benchmark(
+                python_executable,
+                run_env,
+                model_name,
+                params,
+                n_samples,
+                n_features,
+                n_repeats,
+                output_file,
+            )
+
+            if result:
+                result["branch"] = branch
+                result["sklearn_version"] = sklearn_version
+                result["timestamp"] = timestamp
+                all_results.append(result)
+                print(f"    ✓ train={result['train_time_mean']:.4f}s")
             else:
-                param_combinations = [{}]
-
-            # Run for each combination of samples, features, and params
-            for n_samples in n_samples_list:
-                for n_features in n_features_list:
-                    for params in param_combinations:
-                        print(
-                            f"    n_samples={n_samples}, n_features={n_features}, params={params}"
-                        )
-
-                        # Create output filename
-                        param_str = "_".join(f"{k}={v}" for k, v in params.items())
-                        if param_str:
-                            param_str = "_" + param_str
-                        output_file = (
-                            output_dir
-                            / f"{timestamp}_{branch}_{model_name}_s{n_samples}_f{n_features}{param_str}.json"
-                        )
-
-                        # Run benchmark
-                        result = run_benchmark(
-                            python_executable,
-                            run_env,
-                            model_name,
-                            params,
-                            n_samples,
-                            n_features,
-                            n_repeats,
-                            output_file,
-                        )
-
-                        if result:
-                            result["branch"] = branch
-                            result["sklearn_version"] = sklearn_version
-                            result["timestamp"] = timestamp
-                            all_results.append(result)
-                            print(
-                                f"    ✓ train={result['train_time_mean']:.4f}s, predict={result['predict_time_mean']:.4f}s"
-                            )
-                        else:
-                            print(f"    ✗ Failed")
+                print(f"    ✗ Failed")
 
     # Save combined results
     summary_file = output_dir / f"{timestamp}_summary.json"
@@ -311,6 +286,7 @@ def main():
     print("=" * 80)
     print(f"Total benchmarks: {len(all_results)}")
     print(f"Summary saved to: {summary_file}")
+    print(f"JSONL results appended to: {output_file}")
     print("=" * 80)
 
     return 0

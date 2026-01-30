@@ -1,19 +1,15 @@
 {
   "models": {
-    "DecisionTreeClassifier": {
-      "max_depth": [5, 10, 20],
-      "min_samples_split": [2, 10]
-    },
-    "RandomForestClassifier": {
-      "n_estimators": [10, 50, 100],
-      "max_depth": [5, 10]
+    "DecisionTreeRegressor": {
+      "max_depth": [5, 10],
+      "min_samples_split": [10]
     }
   },
   "branches": [
     "main",
     "tree-simpler-missing"
   ],
-  "n_samples": [1000, 5000],
+  "n_samples": [1000],
   "n_features": [20, 50],
   "n_repeats": 3
 }

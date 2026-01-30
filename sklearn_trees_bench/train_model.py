@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-from sklearn.datasets import make_classification, make_regression
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
@@ -22,7 +21,10 @@ MODELS = {
 
 
 def generate_synthetic_data(
-    task="classification", n_samples=1000, n_features=20, random_state=42
+    task="classification",
+    n_samples=1000,
+    n_features=20,
+    cardinality="high",
 ):
     """Generate synthetic data for training.
 
@@ -34,33 +36,74 @@ def generate_synthetic_data(
         Number of samples to generate
     n_features : int, default=20
         Number of features
-    random_state : int, default=42
-        Random state for reproducibility
+    cardinality : str, default="high"
+        Feature cardinality: "high" (default), "medium", "low", or "binary"
 
     Returns
     -------
     X, y : tuple
         Feature matrix and target vector
     """
-    if task == "classification":
-        X, y = make_classification(
-            n_samples=n_samples,
-            n_features=n_features,
-            n_informative=max(2, n_features // 2),
-            n_redundant=max(0, n_features // 4),
-            random_state=random_state,
-        )
-    elif task == "regression":
-        X, y = make_regression(
-            n_samples=n_samples,
-            n_features=n_features,
-            n_informative=max(2, n_features // 2),
-            random_state=random_state,
-        )
+    rng = np.random.default_rng(42)
+
+    if cardinality == "high":
+        X = rng.normal(size=(n_samples, n_features))
+    elif cardinality == "medium":
+        X = rng.geometric(0.02, size=(n_samples, n_features))
+    elif cardinality == "low":
+        X = rng.geometric(0.15, size=(n_samples, n_features))
+    elif cardinality == "binary":
+        X = rng.integers(0, 2, size=(n_samples, n_features))
     else:
+        raise ValueError(f"Unknown cardinality: {cardinality}")
+
+    X = X.astype(np.float32, copy=False)
+    coef = rng.normal(size=n_features)
+    y = X @ coef
+    y += rng.permutation(y)
+
+    if task == "classification":
+        y = (y > np.median(y)).astype(int)
+    elif task != "regression":
         raise ValueError(f"Unknown task: {task}")
 
     return X, y
+
+
+def find_n_samples_for_target(
+    *,
+    model_class,
+    model_params: dict,
+    task: str,
+    n_features: int,
+    cardinality: str,
+    target_fit_s: float,
+) -> int:
+    n_samples = 100
+
+    while True:
+        X, y = generate_synthetic_data(
+            task=task,
+            n_samples=n_samples,
+            n_features=n_features,
+            cardinality=cardinality,
+        )
+        model = model_class(**model_params)
+        start_time = time.perf_counter()
+        model.fit(X, y)
+        elapsed = time.perf_counter() - start_time
+        if elapsed >= target_fit_s:
+            return n_samples
+
+        if str(n_samples)[0] == "2":
+            n_samples = n_samples // 2 * 5
+        else:
+            n_samples *= 2
+
+        if n_samples > 10_000_000:
+            raise RuntimeError(
+                "Failed to reach target fit time; try a lower --target-fit-s."
+            )
 
 
 def train_and_measure(model_class, X, y, **model_params):
@@ -104,7 +147,6 @@ def train_and_measure(model_class, X, y, **model_params):
 def main():
     """Main entry point for the training script."""
     import sklearn
-
     assert "sklearn-env" in sklearn.__path__[0]
 
     parser = argparse.ArgumentParser(
@@ -136,6 +178,19 @@ def main():
         help="Number of features in synthetic dataset (default: 20)",
     )
     parser.add_argument(
+        "--cardinality",
+        type=str,
+        default="high",
+        choices=["high", "medium", "low", "binary"],
+        help="Feature cardinality (default: high)",
+    )
+    parser.add_argument(
+        "--target-fit-s",
+        type=float,
+        default=None,
+        help="Auto-scale n_samples until fit time reaches this target (seconds).",
+    )
+    parser.add_argument(
         "--model-params",
         type=str,
         default="{}",
@@ -145,13 +200,7 @@ def main():
         "--output",
         type=str,
         default=None,
-        help="Output file to save results (JSON format)",
-    )
-    parser.add_argument(
-        "--random-state",
-        type=int,
-        default=42,
-        help="Random state for reproducibility (default: 42)",
+        help="Output file to append results (JSONL format)",
     )
 
     args = parser.parse_args()
@@ -168,15 +217,30 @@ def main():
     # Determine task type from model name
     task = "classification" if "Classifier" in args.model else "regression"
 
+    n_samples = args.n_samples
+    if args.target_fit_s is not None:
+        print("Finding n_samples to reach target fit time...")
+        n_samples = find_n_samples_for_target(
+            model_class=model_class,
+            model_params=model_params,
+            task=task,
+            n_features=args.n_features,
+            cardinality=args.cardinality,
+            target_fit_s=args.target_fit_s,
+        )
+        print(f"  target_fit_s: {args.target_fit_s}")
+        print(f"  resolved n_samples: {n_samples}")
+
     # Generate synthetic data
     print(f"Generating synthetic {task} data...")
-    print(f"  n_samples: {args.n_samples}")
+    print(f"  n_samples: {n_samples}")
     print(f"  n_features: {args.n_features}")
+    print(f"  cardinality: {args.cardinality}")
     X, y = generate_synthetic_data(
         task=task,
-        n_samples=args.n_samples,
+        n_samples=n_samples,
         n_features=args.n_features,
-        random_state=args.random_state,
+        cardinality=args.cardinality,
     )
 
     # Train model n_repeats times
@@ -187,7 +251,7 @@ def main():
     for i in range(args.n_repeats):
         print(f"  Iteration {i + 1}/{args.n_repeats}...", end=" ", flush=True)
         timing = train_and_measure(
-            model_class, X, y, random_state=args.random_state + i, **model_params
+            model_class, X, y, **model_params
         )
         results.append(timing)
         print(
@@ -200,9 +264,11 @@ def main():
 
     summary = {
         "model": args.model,
-        "n_samples": args.n_samples,
+        "n_samples": n_samples,
         "n_features": args.n_features,
+        "cardinality": args.cardinality,
         "n_repeats": args.n_repeats,
+        "target_fit_s": args.target_fit_s,
         "model_params": model_params,
         "train_time_mean": float(np.mean(train_times)),
         "train_time_std": float(np.std(train_times)),
@@ -229,10 +295,13 @@ def main():
     # Save results if requested
     if args.output:
         output_path = Path(args.output)
+        if output_path.suffix != ".jsonl":
+            output_path = output_path.with_suffix(".jsonl")
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w") as f:
-            json.dump(summary, f, indent=2)
-        print(f"\nResults saved to: {output_path}")
+        with open(output_path, "a") as f:
+            f.write(json.dumps(summary))
+            f.write("\n")
+        print(f"\nResults appended to: {output_path}")
 
     return 0
 

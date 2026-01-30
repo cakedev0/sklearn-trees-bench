@@ -102,7 +102,7 @@ def train_and_measure(model_class, X, y, **model_params):
 def main():
     """Main entry point for the training script."""
     import sklearn
-    assert 'sklearn-env' in sklearn.__path__
+    assert 'sklearn-env' in sklearn.__path__[0]
 
     parser = argparse.ArgumentParser(
         description="Train tree/forest models on synthetic data"

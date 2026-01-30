@@ -11,7 +11,6 @@ from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
 
-# Model registry
 MODELS = {
     "DecisionTreeClassifier": DecisionTreeClassifier,
     "DecisionTreeRegressor": DecisionTreeRegressor,
@@ -26,24 +25,6 @@ def generate_synthetic_data(
     n_features=20,
     cardinality="high",
 ):
-    """Generate synthetic data for training.
-
-    Parameters
-    ----------
-    task : str, default="classification"
-        Task type: "classification" or "regression"
-    n_samples : int, default=1000
-        Number of samples to generate
-    n_features : int, default=20
-        Number of features
-    cardinality : str, default="high"
-        Feature cardinality: "high" (default), "medium", "low", or "binary"
-
-    Returns
-    -------
-    X, y : tuple
-        Feature matrix and target vector
-    """
     rng = np.random.default_rng()
 
     if cardinality == "high":
@@ -78,9 +59,10 @@ def find_n_samples_for_target(
     n_features: int,
     cardinality: str,
     target_fit_s: float,
-    start_n_samples: int,
+    **kwargs,
 ) -> int:
-    n_samples = max(10, start_n_samples)
+    assert set(kwargs) <= {'n_samples'}
+    n_samples = 10
 
     while True:
         X, y = generate_synthetic_data(
@@ -108,24 +90,6 @@ def find_n_samples_for_target(
 
 
 def train_and_measure(model_class, X, y, **model_params):
-    """Train a model and measure training time and prediction time.
-
-    Parameters
-    ----------
-    model_class : class
-        Model class to instantiate
-    X : array-like
-        Training features
-    y : array-like
-        Training targets
-    **model_params : dict
-        Parameters to pass to model constructor
-
-    Returns
-    -------
-    dict
-        Dictionary containing timing results and model info
-    """
     # Create model
     model = model_class(**model_params)
 
@@ -145,8 +109,7 @@ def train_and_measure(model_class, X, y, **model_params):
     }
 
 
-def main():
-    """Main entry point for the training script."""
+if __name__ == "__main__":
     import sklearn
     assert "sklearn-env" in sklearn.__path__[0]
 
@@ -190,17 +153,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Parse model parameters
     model_params = json.loads(args.model_params)
-    dataset_params = json.loads(args.data_params)
-
-    data_params = {
-        "n_samples": 1000,
-        "n_features": 20,
-        "cardinality": "high",
-        "target_fit_s": None,
-        **dataset_params,
-    }
+    data_params = json.loads(args.data_params)
 
     # Get model class
     model_class = MODELS[args.model]
@@ -208,69 +162,34 @@ def main():
     # Determine task type from model name
     task = "classification" if "Classifier" in args.model else "regression"
 
-    n_samples = data_params["n_samples"]
-    if data_params["target_fit_s"] is not None:
+    target_fit_s = data_params.pop('target_fit_s', None)
+    if target_fit_s is not None:
         print("Finding n_samples to reach target fit time...")
         n_samples = find_n_samples_for_target(
             model_class=model_class,
             model_params=model_params,
             task=task,
-            n_features=data_params["n_features"],
-            cardinality=data_params["cardinality"],
-            target_fit_s=data_params["target_fit_s"],
-            start_n_samples=data_params["n_samples"],
+            **data_params
         )
         print(f"  target_fit_s: {data_params['target_fit_s']}")
         print(f"  resolved n_samples: {n_samples}")
+        data_params['n_samples'] = n_samples
 
-
-    X, y = generate_synthetic_data(
-        task=task,
-        n_samples=n_samples,
-        n_features=data_params["n_features"],
-        cardinality=data_params["cardinality"],
-    )
+    X, y = generate_synthetic_data(task=task, **data_params)
     results = []
     for _ in range(args.n_repeats):
-        timing = train_and_measure(
-            model_class, X, y, **model_params
-        )
+        timing = train_and_measure(model_class, X, y, **model_params)
         results.append(timing)
         print(f"train={timing['train_time']:.4f}s")
 
-    # Compute statistics
-    train_times = [r["train_time"] for r in results]
-    predict_times = [r["predict_time"] for r in results]
-
     summary = {
         "model": args.model,
-        "n_samples": n_samples,
-        "n_features": data_params["n_features"],
-        "cardinality": data_params["cardinality"],
         "n_repeats": args.n_repeats,
-        "target_fit_s": data_params["target_fit_s"],
         "model_params": model_params,
-        "train_time_mean": float(np.mean(train_times)),
-        "train_time_std": float(np.std(train_times)),
-        "train_time_min": float(np.min(train_times)),
-        "train_time_max": float(np.max(train_times)),
-        "predict_time_mean": float(np.mean(predict_times)),
-        "predict_time_std": float(np.std(predict_times)),
-        "predict_time_min": float(np.min(predict_times)),
-        "predict_time_max": float(np.max(predict_times)),
+        "data_params": data_params,
         "all_results": results,
+        # TODO: add infos about the machine/the config (BLAS/etc.)
     }
-
-    print("\n" + "=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
-    print(f"Model: {summary['model']}")
-    print(
-        f"Train time: {summary['train_time_mean']:.4f} ± {summary['train_time_std']:.4f}s"
-    )
-    print(
-        f"Predict time: {summary['predict_time_mean']:.4f} ± {summary['predict_time_std']:.4f}s"
-    )
 
     # Save results if requested
     if args.output:
@@ -283,10 +202,3 @@ def main():
             f.write("\n")
         print(f"\nResults appended to: {output_path}")
 
-    return 0
-
-
-if __name__ == "__main__":
-    import sys
-
-    sys.exit(main())

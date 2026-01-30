@@ -21,9 +21,11 @@ MODELS = {
 }
 
 
-def generate_synthetic_data(task="classification", n_samples=1000, n_features=20, random_state=42):
+def generate_synthetic_data(
+    task="classification", n_samples=1000, n_features=20, random_state=42
+):
     """Generate synthetic data for training.
-    
+
     Parameters
     ----------
     task : str, default="classification"
@@ -34,7 +36,7 @@ def generate_synthetic_data(task="classification", n_samples=1000, n_features=20
         Number of features
     random_state : int, default=42
         Random state for reproducibility
-    
+
     Returns
     -------
     X, y : tuple
@@ -57,13 +59,13 @@ def generate_synthetic_data(task="classification", n_samples=1000, n_features=20
         )
     else:
         raise ValueError(f"Unknown task: {task}")
-    
+
     return X, y
 
 
 def train_and_measure(model_class, X, y, **model_params):
     """Train a model and measure training time and prediction time.
-    
+
     Parameters
     ----------
     model_class : class
@@ -74,7 +76,7 @@ def train_and_measure(model_class, X, y, **model_params):
         Training targets
     **model_params : dict
         Parameters to pass to model constructor
-    
+
     Returns
     -------
     dict
@@ -82,17 +84,17 @@ def train_and_measure(model_class, X, y, **model_params):
     """
     # Create model
     model = model_class(**model_params)
-    
+
     # Measure training time
     start_time = time.perf_counter()
     model.fit(X, y)
     train_time = time.perf_counter() - start_time
-    
+
     # Measure prediction time
     start_time = time.perf_counter()
-    predictions = model.predict(X)  # Store result to ensure prediction is actually executed
+    _ = model.predict(X)
     predict_time = time.perf_counter() - start_time
-    
+
     return {
         "train_time": train_time,
         "predict_time": predict_time,
@@ -102,7 +104,8 @@ def train_and_measure(model_class, X, y, **model_params):
 def main():
     """Main entry point for the training script."""
     import sklearn
-    assert 'sklearn-env' in sklearn.__path__[0]
+
+    assert "sklearn-env" in sklearn.__path__[0]
 
     parser = argparse.ArgumentParser(
         description="Train tree/forest models on synthetic data"
@@ -150,21 +153,21 @@ def main():
         default=42,
         help="Random state for reproducibility (default: 42)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Parse model parameters
     try:
         model_params = json.loads(args.model_params)
     except json.JSONDecodeError as e:
         parser.error(f"Invalid JSON for --model-params: {e}")
-    
+
     # Get model class
     model_class = MODELS[args.model]
-    
+
     # Determine task type from model name
     task = "classification" if "Classifier" in args.model else "regression"
-    
+
     # Generate synthetic data
     print(f"Generating synthetic {task} data...")
     print(f"  n_samples: {args.n_samples}")
@@ -175,22 +178,26 @@ def main():
         n_features=args.n_features,
         random_state=args.random_state,
     )
-    
+
     # Train model n_repeats times
     print(f"\nTraining {args.model} {args.n_repeats} times...")
     print(f"  Model parameters: {model_params}")
-    
+
     results = []
     for i in range(args.n_repeats):
         print(f"  Iteration {i + 1}/{args.n_repeats}...", end=" ", flush=True)
-        timing = train_and_measure(model_class, X, y, random_state=args.random_state + i, **model_params)
+        timing = train_and_measure(
+            model_class, X, y, random_state=args.random_state + i, **model_params
+        )
         results.append(timing)
-        print(f"train={timing['train_time']:.4f}s, predict={timing['predict_time']:.4f}s")
-    
+        print(
+            f"train={timing['train_time']:.4f}s, predict={timing['predict_time']:.4f}s"
+        )
+
     # Compute statistics
     train_times = [r["train_time"] for r in results]
     predict_times = [r["predict_time"] for r in results]
-    
+
     summary = {
         "model": args.model,
         "n_samples": args.n_samples,
@@ -207,14 +214,18 @@ def main():
         "predict_time_max": float(np.max(predict_times)),
         "all_results": results,
     }
-    
+
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
     print(f"Model: {summary['model']}")
-    print(f"Train time: {summary['train_time_mean']:.4f} ± {summary['train_time_std']:.4f}s")
-    print(f"Predict time: {summary['predict_time_mean']:.4f} ± {summary['predict_time_std']:.4f}s")
-    
+    print(
+        f"Train time: {summary['train_time_mean']:.4f} ± {summary['train_time_std']:.4f}s"
+    )
+    print(
+        f"Predict time: {summary['predict_time_mean']:.4f} ± {summary['predict_time_std']:.4f}s"
+    )
+
     # Save results if requested
     if args.output:
         output_path = Path(args.output)
@@ -222,10 +233,11 @@ def main():
         with open(output_path, "w") as f:
             json.dump(summary, f, indent=2)
         print(f"\nResults saved to: {output_path}")
-    
+
     return 0
 
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

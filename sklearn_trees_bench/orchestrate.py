@@ -90,8 +90,7 @@ def run_benchmark(
     env,
     model,
     model_params,
-    n_samples,
-    n_features,
+    data_params,
     n_repeats,
     output_file,
 ):
@@ -102,12 +101,10 @@ def run_benchmark(
         "sklearn_trees_bench.train_model",
         "--model",
         model,
-        "--n-samples",
-        str(n_samples),
-        "--n-features",
-        str(n_features),
         "--n-repeats",
         str(n_repeats),
+        "--data-params",
+        json.dumps(data_params),
         "--model-params",
         json.dumps(model_params),
         "--output",
@@ -136,7 +133,20 @@ def run_benchmark(
         print(f"    Error: {e}")
         return None
 
+def normalize_grid(grid: dict | None) -> dict:
+    if not grid:
+        return {}
+    normalized = {}
+    for key, value in grid.items():
+        if isinstance(value, list):
+            normalized[key] = value
+        else:
+            normalized[key] = [value]
+    return normalized
+
+
 def generate_combinations(grid: dict | None):
+    grid = normalize_grid(grid)
     if not grid:
         return [{}]
 
@@ -147,15 +157,22 @@ def generate_combinations(grid: dict | None):
 
 
 def generate_scenarios(config: dict):
-    n_samples_list = config.get("n_samples", [1000])
-    n_features_list = config.get("n_features", [20])
+    dataset_grids = config.get("datasets", [])
+    if not dataset_grids:
+        dataset_grids = [{}]
 
     for model_name, param_grid in config["models"].items():
         print(f"\n  Model: {model_name}")
 
         param_combinations = generate_combinations(param_grid)
 
-        yield from product([model_name], param_combinations, n_samples_list, n_features_list)
+        for dataset_grid in dataset_grids:
+            dataset_combinations = generate_combinations(dataset_grid)
+            for params, dataset_params in product(
+                param_combinations,
+                dataset_combinations,
+            ):
+                yield model_name, params, dataset_params
 
 
 def main():
@@ -186,14 +203,17 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Validate config
-    required_keys = ["models", "branches"]
+    required_keys = ["models", "branches", "datasets"]
     for key in required_keys:
         if key not in config:
             parser.error(f"Config file missing required key: {key}")
 
-    # Setup defaults
-    n_samples_list = config.get("n_samples", [1000])
-    n_features_list = config.get("n_features", [20])
+    dataset_grids = config.get("datasets", [])
+    if not isinstance(dataset_grids, list):
+        parser.error("Config key 'datasets' must be a list of dataset grids.")
+    for idx, dataset_grid in enumerate(dataset_grids):
+        if not isinstance(dataset_grid, dict):
+            parser.error(f"datasets[{idx}] must be a JSON object.")
     n_repeats = config.get("n_repeats", 3)
 
     # Check sklearn submodule
@@ -224,8 +244,7 @@ def main():
     print(f"Timestamp: {timestamp}")
     print(f"Models: {', '.join(config['models'].keys())}")
     print(f"Branches: {', '.join(config['branches'])}")
-    print(f"n_samples: {n_samples_list}")
-    print(f"n_features: {n_features_list}")
+    print(f"Datasets: {len(dataset_grids)} grid(s)")
     print(f"n_repeats: {n_repeats}")
     print("=" * 80)
 
@@ -240,8 +259,9 @@ def main():
         sklearn_version = get_sklearn_version(python_executable)
 
         # Run benchmarks for this branch
-        for model_name, params, n_samples, n_features in generate_scenarios(config):
-            print(f"    n_samples={n_samples}, n_features={n_features}, params={params}")
+        for model_name, params, dataset_params in generate_scenarios(config):
+            dataset_label = dataset_params if dataset_params else "defaults"
+            print(f"    dataset={dataset_label}, params={params}")
 
             # Run benchmark
             result = run_benchmark(
@@ -249,8 +269,7 @@ def main():
                 run_env,
                 model_name,
                 params,
-                n_samples,
-                n_features,
+                dataset_params,
                 n_repeats,
                 output_file,
             )

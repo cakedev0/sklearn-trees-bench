@@ -62,11 +62,17 @@ Example configuration file (`example_config.json`):
     }
   },
   "branches": ["main", "1.3.X"],
-  "n_samples": [1000, 5000],
-  "n_features": [20, 50],
+  "datasets": [
+    {
+      "n_samples": [1000, 5000],
+      "n_features": [20, 50],
+      "cardinality": ["high", "medium"]
+    }
+  ],
   "n_repeats": 3
 }
 ```
+`datasets` is a list of dataset parameter grids. Each grid can include `n_samples`, `n_features`, `cardinality`, and `target_fit_s` values.
 
 ### 3. Visualize Results
 
@@ -91,17 +97,13 @@ uv run jupyter notebook visualize_results.ipynb
 
 ```
 usage: train-model [-h] --model {DecisionTreeClassifier,DecisionTreeRegressor,RandomForestClassifier,RandomForestRegressor}
-                   [--n-repeats N_REPEATS] [--n-samples N_SAMPLES] [--n-features N_FEATURES]
-                   [--cardinality {high,medium,low,binary}] [--target-fit-s TARGET_FIT_S]
+                   [--n-repeats N_REPEATS] [--data-params DATA_PARAMS]
                    [--model-params MODEL_PARAMS] [--output OUTPUT]
 
 options:
   --model               Model to train (required)
   --n-repeats           Number of times to repeat training (default: 3)
-  --n-samples           Number of samples in synthetic dataset (default: 1000)
-  --n-features          Number of features in synthetic dataset (default: 20)
-  --cardinality         Feature cardinality (default: high)
-  --target-fit-s        Auto-scale n_samples until fit time reaches this target (seconds)
+  --data-params         Dataset parameters as JSON string (keys: n_samples, n_features, cardinality, target_fit_s)
   --model-params        Model parameters as JSON string (default: '{}')
   --output              Output file to append results (JSONL format)
 ```

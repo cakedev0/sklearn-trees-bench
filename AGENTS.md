@@ -19,6 +19,7 @@
 - Python ≥3.10; 4-space indentation; prefer clear, descriptive names mirroring CLI flags (e.g., `n_samples`, `n_features`).
 - Use NumPy-style docstrings for public functions and keep argument defaults consistent with CLI defaults.
 - Keep output file naming consistent with orchestration patterns (timestamp, branch, model, params).
+- Keep changes simple and short.
 
 ## Testing Guidelines
 - This repository does not currently ship a dedicated test suite; `uv run pytest` is available if tests are added.

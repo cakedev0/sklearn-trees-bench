@@ -44,7 +44,7 @@ def generate_synthetic_data(
     X, y : tuple
         Feature matrix and target vector
     """
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng()
 
     if cardinality == "high":
         X = rng.normal(size=(n_samples, n_features))
@@ -78,8 +78,9 @@ def find_n_samples_for_target(
     n_features: int,
     cardinality: str,
     target_fit_s: float,
+    start_n_samples: int,
 ) -> int:
-    n_samples = 100
+    n_samples = max(10, start_n_samples)
 
     while True:
         X, y = generate_synthetic_data(
@@ -102,7 +103,7 @@ def find_n_samples_for_target(
 
         if n_samples > 10_000_000:
             raise RuntimeError(
-                "Failed to reach target fit time; try a lower --target-fit-s."
+                "Failed to reach target fit time; try a lower target_fit_s."
             )
 
 
@@ -166,29 +167,13 @@ def main():
         help="Number of times to repeat the training (default: 3)",
     )
     parser.add_argument(
-        "--n-samples",
-        type=int,
-        default=1000,
-        help="Number of samples in synthetic dataset (default: 1000)",
-    )
-    parser.add_argument(
-        "--n-features",
-        type=int,
-        default=20,
-        help="Number of features in synthetic dataset (default: 20)",
-    )
-    parser.add_argument(
-        "--cardinality",
+        "--data-params",
         type=str,
-        default="high",
-        choices=["high", "medium", "low", "binary"],
-        help="Feature cardinality (default: high)",
-    )
-    parser.add_argument(
-        "--target-fit-s",
-        type=float,
-        default=None,
-        help="Auto-scale n_samples until fit time reaches this target (seconds).",
+        default="{}",
+        help=(
+            "Dataset parameters as JSON string (keys: n_samples, n_features, "
+            "cardinality, target_fit_s)"
+        ),
     )
     parser.add_argument(
         "--model-params",
@@ -206,10 +191,16 @@ def main():
     args = parser.parse_args()
 
     # Parse model parameters
-    try:
-        model_params = json.loads(args.model_params)
-    except json.JSONDecodeError as e:
-        parser.error(f"Invalid JSON for --model-params: {e}")
+    model_params = json.loads(args.model_params)
+    dataset_params = json.loads(args.data_params)
+
+    data_params = {
+        "n_samples": 1000,
+        "n_features": 20,
+        "cardinality": "high",
+        "target_fit_s": None,
+        **dataset_params,
+    }
 
     # Get model class
     model_class = MODELS[args.model]
@@ -217,46 +208,35 @@ def main():
     # Determine task type from model name
     task = "classification" if "Classifier" in args.model else "regression"
 
-    n_samples = args.n_samples
-    if args.target_fit_s is not None:
+    n_samples = data_params["n_samples"]
+    if data_params["target_fit_s"] is not None:
         print("Finding n_samples to reach target fit time...")
         n_samples = find_n_samples_for_target(
             model_class=model_class,
             model_params=model_params,
             task=task,
-            n_features=args.n_features,
-            cardinality=args.cardinality,
-            target_fit_s=args.target_fit_s,
+            n_features=data_params["n_features"],
+            cardinality=data_params["cardinality"],
+            target_fit_s=data_params["target_fit_s"],
+            start_n_samples=data_params["n_samples"],
         )
-        print(f"  target_fit_s: {args.target_fit_s}")
+        print(f"  target_fit_s: {data_params['target_fit_s']}")
         print(f"  resolved n_samples: {n_samples}")
 
-    # Generate synthetic data
-    print(f"Generating synthetic {task} data...")
-    print(f"  n_samples: {n_samples}")
-    print(f"  n_features: {args.n_features}")
-    print(f"  cardinality: {args.cardinality}")
+
     X, y = generate_synthetic_data(
         task=task,
         n_samples=n_samples,
-        n_features=args.n_features,
-        cardinality=args.cardinality,
+        n_features=data_params["n_features"],
+        cardinality=data_params["cardinality"],
     )
-
-    # Train model n_repeats times
-    print(f"\nTraining {args.model} {args.n_repeats} times...")
-    print(f"  Model parameters: {model_params}")
-
     results = []
-    for i in range(args.n_repeats):
-        print(f"  Iteration {i + 1}/{args.n_repeats}...", end=" ", flush=True)
+    for _ in range(args.n_repeats):
         timing = train_and_measure(
             model_class, X, y, **model_params
         )
         results.append(timing)
-        print(
-            f"train={timing['train_time']:.4f}s, predict={timing['predict_time']:.4f}s"
-        )
+        print(f"train={timing['train_time']:.4f}s")
 
     # Compute statistics
     train_times = [r["train_time"] for r in results]
@@ -265,10 +245,10 @@ def main():
     summary = {
         "model": args.model,
         "n_samples": n_samples,
-        "n_features": args.n_features,
-        "cardinality": args.cardinality,
+        "n_features": data_params["n_features"],
+        "cardinality": data_params["cardinality"],
         "n_repeats": args.n_repeats,
-        "target_fit_s": args.target_fit_s,
+        "target_fit_s": data_params["target_fit_s"],
         "model_params": model_params,
         "train_time_mean": float(np.mean(train_times)),
         "train_time_std": float(np.std(train_times)),

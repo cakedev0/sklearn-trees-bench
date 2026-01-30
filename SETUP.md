@@ -50,8 +50,13 @@ Example `config.json`:
     }
   },
   "branches": ["main", "1.3.X"],
-  "n_samples": [1000, 5000],
-  "n_features": [20, 50],
+  "datasets": [
+    {
+      "n_samples": [1000, 5000],
+      "n_features": [20, 50],
+      "cardinality": ["high", "medium"]
+    }
+  ],
   "n_repeats": 3
 }
 ```
@@ -62,8 +67,8 @@ Example `config.json`:
   - Each parameter can have a list of values to test
   - Empty dict `{}` means use default parameters
 - **branches**: List of git branch names or commit hashes to test
-- **n_samples**: List of sample counts for synthetic datasets
-- **n_features**: List of feature counts for synthetic datasets
+- **datasets**: List of dataset parameter grids
+  - Each grid can include `n_samples`, `n_features`, `cardinality`, `target_fit_s`
 - **n_repeats**: Number of times to repeat each benchmark (for statistical stability)
 
 ## Example workflows
@@ -78,8 +83,13 @@ cat > quick_test.json << 'ENDCONFIG'
     "DecisionTreeClassifier": {"max_depth": [5]}
   },
   "branches": ["current"],
-  "n_samples": [1000],
-  "n_features": [20],
+  "datasets": [
+    {
+      "n_samples": [1000],
+      "n_features": [20],
+      "cardinality": ["high"]
+    }
+  ],
   "n_repeats": 3
 }
 ENDCONFIG

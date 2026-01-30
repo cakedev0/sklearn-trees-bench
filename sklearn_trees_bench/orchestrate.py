@@ -169,18 +169,6 @@ def main():
         required=True,
         help="JSON config file with benchmark parameters",
     )
-    parser.add_argument(
-        "--sklearn-path",
-        type=str,
-        default="scikit-learn",
-        help="Path to scikit-learn submodule (default: 'scikit-learn')",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="results",
-        help="Output directory for results (default: 'results')",
-    )
 
     args = parser.parse_args()
 
@@ -193,8 +181,8 @@ def main():
         config = json.load(f)
 
     # Setup paths
-    sklearn_path = Path(args.sklearn_path)
-    output_dir = Path(args.output_dir)
+    sklearn_path = Path('scikit-learn')
+    output_dir = Path('results')
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Validate config

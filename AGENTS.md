@@ -11,7 +11,7 @@
 - `uv sync` installs dependencies into the managed environment.
 - `uv pip install -e .` installs the package in editable mode for CLI development.
 - `uv run train-model --model DecisionTreeClassifier --n-repeats 5` runs a single benchmark.
-- `uv run orchestrate --config example_config.json --output-dir results` runs grid benchmarks.
+- `uv run orchestrate --config example_config.json` runs grid benchmarks.
 - `uv run jupyter notebook visualize_results.ipynb` opens the results notebook.
 - `uv run ruff format` and `uv run ruff check` format and lint the code.
 

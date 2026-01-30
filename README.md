@@ -44,7 +44,7 @@ git submodule add https://github.com/scikit-learn/scikit-learn.git scikit-learn
 git submodule update --init --recursive
 
 # Build scikit-learn in scikit-learn/sklearn-env (see SETUP.md), then run:
-uv run orchestrate --config example_config.json --output-dir results
+uv run orchestrate --config example_config.json
 ```
 
 Example configuration file (`example_config.json`):
@@ -92,28 +92,27 @@ uv run jupyter notebook visualize_results.ipynb
 ```
 usage: train-model [-h] --model {DecisionTreeClassifier,DecisionTreeRegressor,RandomForestClassifier,RandomForestRegressor}
                    [--n-repeats N_REPEATS] [--n-samples N_SAMPLES] [--n-features N_FEATURES]
-                   [--model-params MODEL_PARAMS] [--output OUTPUT] [--random-state RANDOM_STATE]
+                   [--cardinality {high,medium,low,binary}] [--target-fit-s TARGET_FIT_S]
+                   [--model-params MODEL_PARAMS] [--output OUTPUT]
 
 options:
   --model               Model to train (required)
   --n-repeats           Number of times to repeat training (default: 3)
   --n-samples           Number of samples in synthetic dataset (default: 1000)
   --n-features          Number of features in synthetic dataset (default: 20)
+  --cardinality         Feature cardinality (default: high)
+  --target-fit-s        Auto-scale n_samples until fit time reaches this target (seconds)
   --model-params        Model parameters as JSON string (default: '{}')
-  --output              Output file to save results (JSON format)
-  --random-state        Random state for reproducibility (default: 42)
+  --output              Output file to append results (JSONL format)
 ```
 
 #### orchestrate
 
 ```
-usage: orchestrate [-h] --config CONFIG [--sklearn-path SKLEARN_PATH]
-                   [--output-dir OUTPUT_DIR]
+usage: orchestrate [-h] --config CONFIG
 
 options:
   --config              JSON config file with benchmark parameters (required)
-  --sklearn-path        Path to scikit-learn submodule (default: 'scikit-learn')
-  --output-dir          Output directory for results (default: 'results')
 ```
 
 ## Project Structure

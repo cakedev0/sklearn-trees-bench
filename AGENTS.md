@@ -16,10 +16,11 @@
 - `uv run ruff format` and `uv run ruff check` format and lint the code.
 
 ## Coding Style & Naming Conventions
-- Python ≥3.10; 4-space indentation; prefer clear, descriptive names mirroring CLI flags (e.g., `n_samples`, `n_features`).
-- Use NumPy-style docstrings for public functions and keep argument defaults consistent with CLI defaults.
-- Keep output file naming consistent with orchestration patterns (timestamp, branch, model, params).
-- Keep changes simple and short.
+- Python ≥3.10; 4-space indentation; prefer clear, descriptive names mirroring CLI flags.
+- Don't over-engineer, Keep the code as simple (and short) as possible.
+- Avoid docstrings, unless there are non-trivial things to explain.
+- Keep things consistent with code changes: documentation, output file naming, configs, etc.
+
 
 ## Testing Guidelines
 - This repository does not currently ship a dedicated test suite; `uv run pytest` is available if tests are added.

@@ -1,0 +1,22 @@
+{
+  "models": {
+    "DecisionTreeRegressor": {
+      "min_weight_fraction_leaf": [1e-1, 1e-2, 1e-4, 0.0],
+      "max_features": [1.0, "log2"]
+    }
+  },
+  "branches": [
+    "main",
+    "tree-simpler-missing",
+    "exp/tree/partitioner_polymorphism"
+  ],
+  "datasets": [
+    {
+      "target_fit_s": 0.5,
+      "n_features": [1, 10, 100, 1000],
+      "cardinality": ["binary", "low", "medium", "high"]
+    }
+  ],
+  "n_repeats": 7,
+  "warmup_s": 30
+}

@@ -85,11 +85,6 @@ def find_n_samples_for_target(
         else:
             n_samples *= 2
 
-        if n_samples > 10_000_000:
-            raise RuntimeError(
-                "Failed to reach target fit time; try a lower target_fit_s."
-            )
-
 
 def train_and_measure(model_class, X, y, **model_params):
     # Create model
@@ -182,9 +177,9 @@ if __name__ == "__main__":
             model_class=model_class,
             model_params=model_params,
             task=task,
+            target_fit_s=target_fit_s,
             **data_params
         )
-        print(f"  target_fit_s: {data_params['target_fit_s']}")
         print(f"  resolved n_samples: {n_samples}")
         data_params['n_samples'] = n_samples
 

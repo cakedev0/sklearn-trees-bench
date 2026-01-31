@@ -9,6 +9,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from itertools import product, chain
+import time
+
+import numpy as np
 
 
 def checkout_sklearn_branch(sklearn_path, branch):
@@ -25,6 +28,14 @@ def checkout_sklearn_branch(sklearn_path, branch):
     except subprocess.CalledProcessError as e:
         print(f"  Error checking out branch {branch}: {e.stderr}")
         return False
+
+
+def warmup(s):
+    t = time.perf_counter()
+    X = np.random.rand(1000, 1000)
+    Y = np.empty_like(X)
+    while time.perf_counter() - t < s:
+        np.dot(X, X.T, out=Y)
 
 
 def run_benchmark(
@@ -106,13 +117,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Load config
-    config_path = Path(args.config)
-    if not config_path.exists():
-        parser.error(f"Config file not found: {config_path}")
-
-    with open(config_path, "r") as f:
-        config = json.load(f)
+    with open(args.config, "r") as f:
+        config: dict = json.load(f)
 
     # Setup paths
     sklearn_path = Path('scikit-learn')
@@ -125,7 +131,7 @@ def main():
         if key not in config:
             parser.error(f"Config file missing required key: {key}")
 
-    n_repeats = config.get("n_repeats", 3)
+    n_repeats = config.get("n_repeats", 1)
 
     # Resolve runner environment
     python_executable = str(sklearn_path / "sklearn-env" / "bin" / "python")
@@ -142,6 +148,12 @@ def main():
 
     # Run benchmarks
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    s = config.get('warmup_s', 0)
+    if s:
+        print(f'Warming up for {s}s...')
+        warmup(s)
+        print('Warmup done')
 
     print("=" * 80)
     print("BENCHMARK ORCHESTRATION")
@@ -163,8 +175,11 @@ def main():
         branch = branch.replace("/", "_")
         output_file = output_dir / f"{timestamp}_{branch}.jsonl"
 
+        scenarios = list(generate_scenarios(config))
+        print(f'  Evaluating {len(scenarios)} scenarios:')
+
         # Run benchmarks for this branch
-        for model_name, params, dataset_params in generate_scenarios(config):
+        for model_name, params, dataset_params in scenarios:
             dataset_label = dataset_params if dataset_params else "defaults"
             print(f"    params={params}, dataset={dataset_label}")
 

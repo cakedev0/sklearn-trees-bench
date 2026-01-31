@@ -5,6 +5,7 @@ import argparse
 import json
 import time
 from pathlib import Path
+import subprocess
 
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
@@ -18,13 +19,14 @@ MODELS = {
     "RandomForestRegressor": RandomForestRegressor,
 }
 
+DEFAULT_DATA_PARAMS = {
+    "n_samples": 1000,
+    "n_features": 20,
+    "cardinality": "high",
+}
 
-def generate_synthetic_data(
-    task="classification",
-    n_samples=1000,
-    n_features=20,
-    cardinality="high",
-):
+
+def generate_synthetic_data(task, n_samples, n_features, cardinality):
     rng = np.random.default_rng()
 
     if cardinality == "high":
@@ -155,6 +157,17 @@ if __name__ == "__main__":
 
     model_params = json.loads(args.model_params)
     data_params = json.loads(args.data_params)
+    data_params = {**DEFAULT_DATA_PARAMS, **data_params}
+
+    branch = subprocess.check_output(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        text=True,
+    ).strip()
+
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
 
     # Get model class
     model_class = MODELS[args.model]
@@ -182,12 +195,14 @@ if __name__ == "__main__":
         results.append(timing)
         print(f"train={timing['train_time']:.4f}s")
 
-    summary = {
+    out = {
         "model": args.model,
         "n_repeats": args.n_repeats,
         "model_params": model_params,
         "data_params": data_params,
-        "all_results": results,
+        "branch": branch,
+        "commit": commit,
+        "results": results,
         # TODO: add infos about the machine/the config (BLAS/etc.)
     }
 
@@ -198,7 +213,8 @@ if __name__ == "__main__":
             output_path = output_path.with_suffix(".jsonl")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "a") as f:
-            f.write(json.dumps(summary))
+            f.write(json.dumps(out))
             f.write("\n")
         print(f"\nResults appended to: {output_path}")
-
+    else:
+        print(out)

@@ -2,7 +2,7 @@
   "models": {
     "DecisionTreeRegressor": {
       "min_weight_fraction_leaf": [1e-1, 1e-2, 1e-4, 0.0],
-      "max_features": 1.0
+      "max_features": [1.0]
     }
   },
   "branches": [
@@ -12,9 +12,9 @@
   ],
   "datasets": [
     {
-      "target_fit_s": 0.5,
-      "n_features": [1, 10, 100, 1000],
-      "cardinality": ["binary", "low", "medium", "high"]
+      "target_fit_s": 1.0,
+      "n_features": [1000, 10000],
+      "cardinality": ["binary", "high"]
     }
   ],
   "n_repeats": 7,

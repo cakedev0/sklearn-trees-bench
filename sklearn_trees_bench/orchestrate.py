@@ -2,6 +2,7 @@
 """Orchestrate benchmarks across different scikit-learn branches and parameter grids."""
 
 import argparse
+from copy import deepcopy
 import json
 import os
 import subprocess
@@ -12,6 +13,7 @@ from itertools import product, chain
 import time
 
 import numpy as np
+from tqdm import tqdm
 
 
 def checkout_sklearn_branch(sklearn_path, branch):
@@ -45,7 +47,7 @@ def run_benchmark(
     model_params,
     data_params,
     n_repeats,
-    output_file,
+    output_file=None,
 ):
     # Build command
     cmd = [
@@ -54,8 +56,9 @@ def run_benchmark(
         "--n-repeats", str(n_repeats),
         "--data-params", json.dumps(data_params),
         "--model-params", json.dumps(model_params),
-        "--output", str(output_file),
     ]
+    if output_file is not None:
+        cmd.extend(["--output", str(output_file)])
 
     subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
 
@@ -95,12 +98,19 @@ def generate_scenarios(config: dict):
         yield from product([model_name], param_combinations, dataset_combinations)
 
 
-def update_scenarios_with_n_samples(scenarios, outputs):
-    for (_, _, data_params), output in zip(scenarios, outputs):
+def update_scenarios_with_n_samples(scenarios: list, output_file: Path):
+    with output_file.open("r") as f:
+        outputs = [json.loads(line) for line in f if line.strip()]
+    assert len(outputs) == len(scenarios)
+
+    for (model, model_params, data_params), output in zip(scenarios, outputs):
         if "target_fit_s" not in data_params:
             continue
+        assert model == output['model']
+        assert model_params == output['model_params']
         data_params.pop("target_fit_s")
         data_params["n_samples"] = output['data_params']['n_samples']
+        assert data_params == output['data_params']
 
 
 def main():
@@ -165,6 +175,7 @@ def main():
     print("=" * 80)
 
     scenarios = list(generate_scenarios(config))
+    scenarios = [deepcopy(sc) for sc in scenarios]
 
     for branch_index, branch in enumerate(config["branches"]):
         print(f"\nProcessing branch: {branch}")
@@ -174,17 +185,16 @@ def main():
             print(f"  Skipping branch {branch} due to checkout error")
             continue
 
+        print('   Compiling...')
+        run_benchmark(python_executable, run_env, *scenarios[0], n_repeats=1)
+
         branch = branch.replace("/", "_")
         output_file = output_dir / f"{timestamp}_{branch}.jsonl"
 
-        print(f'  Evaluating {len(scenarios)} scenarios:')
+        print(f'  Evaluating {len(scenarios)} scenarios')
 
-        successful_indices = []
         # Run benchmarks for this branch
-        for scenario_index, (model_name, params, dataset_params) in enumerate(scenarios):
-            dataset_label = dataset_params if dataset_params else "defaults"
-            print(f"    params={params}, dataset={dataset_label}")
-
+        for model_name, params, dataset_params in tqdm(scenarios):
             # Run benchmark
             run_benchmark(
                 python_executable,
@@ -197,10 +207,7 @@ def main():
             )
 
         if branch_index == 0:
-            with output_file.open("r") as f:
-                outputs = [json.loads(line) for line in f if line.strip()]
-            assert len(scenarios) == len(outputs)
-            update_scenarios_with_n_samples(scenarios, outputs)
+            update_scenarios_with_n_samples(scenarios, output_file)
 
     return 0
 

@@ -154,14 +154,17 @@ if __name__ == "__main__":
     data_params = json.loads(args.data_params)
     data_params = {**DEFAULT_DATA_PARAMS, **data_params}
 
+    sklearn_path = Path('scikit-learn')
     branch = subprocess.check_output(
         ["git", "rev-parse", "--abbrev-ref", "HEAD"],
         text=True,
+        cwd=sklearn_path
     ).strip()
 
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"],
         text=True,
+        cwd=sklearn_path
     ).strip()
 
     # Get model class

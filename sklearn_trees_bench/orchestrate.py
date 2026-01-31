@@ -57,14 +57,8 @@ def run_benchmark(
         "--output", str(output_file),
     ]
 
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
-    except subprocess.CalledProcessError as e:
-        print(f"    Error running benchmark: {e.stderr}")
-        return None
-    except Exception as e:
-        print(f"    Error: {e}")
-        return None
+    subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
+
 
 def normalize_grid(grid: dict | None) -> dict:
     if not grid:
@@ -97,10 +91,16 @@ def generate_scenarios(config: dict):
     ]))
 
     for model_name, param_grid in config["models"].items():
-        print(f"\n  Model: {model_name}")
-
         param_combinations = generate_combinations(param_grid)
         yield from product([model_name], param_combinations, dataset_combinations)
+
+
+def update_scenarios_with_n_samples(scenarios, outputs):
+    for (_, _, data_params), output in zip(scenarios, outputs):
+        if "target_fit_s" not in data_params:
+            continue
+        data_params.pop("target_fit_s")
+        data_params["n_samples"] = output['data_params']['n_samples']
 
 
 def main():
@@ -164,7 +164,9 @@ def main():
     print(f"n_repeats: {n_repeats}")
     print("=" * 80)
 
-    for branch in config["branches"]:
+    scenarios = list(generate_scenarios(config))
+
+    for branch_index, branch in enumerate(config["branches"]):
         print(f"\nProcessing branch: {branch}")
 
         # Checkout branch
@@ -175,11 +177,11 @@ def main():
         branch = branch.replace("/", "_")
         output_file = output_dir / f"{timestamp}_{branch}.jsonl"
 
-        scenarios = list(generate_scenarios(config))
         print(f'  Evaluating {len(scenarios)} scenarios:')
 
+        successful_indices = []
         # Run benchmarks for this branch
-        for model_name, params, dataset_params in scenarios:
+        for scenario_index, (model_name, params, dataset_params) in enumerate(scenarios):
             dataset_label = dataset_params if dataset_params else "defaults"
             print(f"    params={params}, dataset={dataset_label}")
 
@@ -193,6 +195,12 @@ def main():
                 n_repeats,
                 output_file,
             )
+
+        if branch_index == 0:
+            with output_file.open("r") as f:
+                outputs = [json.loads(line) for line in f if line.strip()]
+            assert len(scenarios) == len(outputs)
+            update_scenarios_with_n_samples(scenarios, outputs)
 
     return 0
 
